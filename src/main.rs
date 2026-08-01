@@ -3,6 +3,8 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
+use std::time::Instant;
+use std::env;
 
 struct Node {
     value: i32,
@@ -204,31 +206,63 @@ fn decode(
 }
 
 fn main() {
-    let text = fs::read_to_string("text.txt").unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        println!("Usage: {} <input_file>", args[0]);
+        return;
+    }
+    let input_file = &args[1];
+    let text = fs::read_to_string(input_file).unwrap();
+
+    let start = Instant::now();
     let freq = build_frequency(&text);
+    println!("Build frequency: {:?}", start.elapsed());
+
+    let start = Instant::now();
     let tree = build_tree(&freq);
+    println!("Build tree: {:?}", start.elapsed());
+
+    let start = Instant::now();
     let codes = build_codes(tree);
+    println!("Build codes: {:?}", start.elapsed());
+
+    let start = Instant::now();
     let bits = encode(&text,&codes);
-    let (bytes,valid_bits)=bits_to_bytes(bits);
+    println!("Encode: {:?}", start.elapsed());
+
+    let start = Instant::now();
+    let (bytes,total_bits)=bits_to_bytes(bits);
+    println!("Pack bits: {:?}", start.elapsed());
+
+    let start = Instant::now();
     compress_file(
         &freq,
         bytes,
-        valid_bits
+        total_bits
     );
+    println!("Write compressed file: {:?}", start.elapsed());
 
+    let start = Instant::now();
     let (freq2,bytes2,total_bits2)=decompress_file();
-    let tree2 = build_tree(&freq2);
+    println!("Read compressed file: {:?}", start.elapsed());
 
+    let start = Instant::now();
+    let tree2 = build_tree(&freq2);
+    println!("Rebuild tree: {:?}", start.elapsed());
+
+    let start = Instant::now();
     let decoded = decode(
         tree2,
         bytes2,
         total_bits2
     );
+    println!("Decode: {:?}", start.elapsed());
 
+    let start = Instant::now();
     fs::write(
         "output.txt",
         decoded
     ).unwrap();
-
-    println!("Done!");
+    println!("Write output: {:?}", start.elapsed());
+    println!("Total: {:?}", start.elapsed());
 }
