@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::time::Instant;
 use std::env;
+use rayon::prelude::*;
 
 struct Node {
     value: i32,
@@ -35,12 +36,26 @@ impl Ord for Node {
     }
 }
 
-fn build_frequency(text: &String) -> HashMap<char, i32> {
-    let mut freq = HashMap::new();
-    for c in text.chars() {
-        *freq.entry(c).or_insert(0) += 1;
-    }
-    freq
+fn build_frequency(text: &str) -> HashMap<char, i32> {
+    text.as_bytes()
+        .par_chunks(4096)
+        .map(|chunk| {
+            let mut local = HashMap::new();
+            for &b in chunk {
+                let c = b as char;
+                *local.entry(c).or_insert(0) += 1;
+            }
+            local
+        })
+        .reduce(
+            HashMap::new,
+            |mut a, b| {
+                for (k, v) in b {
+                    *a.entry(k).or_insert(0) += v;
+                }
+                a
+            },
+        )
 }
 
 fn build_tree(freq: &HashMap<char, i32>) -> Box<Node> {
@@ -87,12 +102,14 @@ fn build_codes(root: Box<Node>) -> HashMap<char, String> {
     codes
 }
 
-fn encode(text: &String, codes: &HashMap<char,String>) -> String {
-    let mut bits = String::new();
-    for c in text.chars() {
-        bits.push_str(codes.get(&c).unwrap());
-    }
-    bits
+fn encode(text: &str, codes: &HashMap<char, String>) -> String {
+    text.par_bytes()
+        .map(|c| {
+            let c = c as char;
+            codes.get(&c).unwrap().clone()
+        })
+        .collect::<Vec<String>>()
+        .join("")
 }
 
 fn bits_to_bytes(bits: String) -> (Vec<u8>, usize) {
@@ -112,16 +129,10 @@ fn bits_to_bytes(bits: String) -> (Vec<u8>, usize) {
             count = 0;
         }
     }
-    let valid_bits;
     if count > 0 {
         current <<= 8-count;
         bytes.push(current);
-        valid_bits = count;
     }
-    else {
-        valid_bits = 8;
-    }
-
     (bytes, total_bits)
 }
 
@@ -177,7 +188,7 @@ fn decode(root: Box<Node>, bytes: Vec<u8>, total_bits:usize) -> String {
     let mut result = String::new();
     let mut node = &root;
     let mut read_bits = 0;
-    
+
     for byte in bytes {
         for i in (0..8).rev() {
             if read_bits >= total_bits {
