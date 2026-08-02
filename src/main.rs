@@ -125,11 +125,7 @@ fn bits_to_bytes(bits: String) -> (Vec<u8>, usize) {
     (bytes, total_bits)
 }
 
-fn compress_file(
-    freq: &HashMap<char,i32>,
-    bytes: Vec<u8>,
-    total_bits: usize
-) {
+fn compress_file(freq: &HashMap<char,i32>, bytes: Vec<u8>, total_bits: usize) {
     let mut header = String::new();
     for (c,count) in freq {
         header.push_str(&format!("{} {}\n", c, count));
@@ -147,12 +143,15 @@ fn decompress_file() -> (HashMap<char,i32>, Vec<u8>, usize) {
     let mut file = File::open("compressed.huff").unwrap();
     let mut size_buffer = [0u8;4];
     file.read_exact(&mut size_buffer).unwrap();
+
     let size = u32::from_le_bytes(size_buffer) as usize;
     let mut header_bytes = vec![0u8; size];
     file.read_exact(&mut header_bytes).unwrap();
+
     let header = String::from_utf8(header_bytes).unwrap();
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).unwrap();
+
     let mut freq = HashMap::new();
     let mut total_bits = 0;
     for line in header.lines() {
@@ -174,14 +173,11 @@ fn decompress_file() -> (HashMap<char,i32>, Vec<u8>, usize) {
     (freq, bytes, total_bits)
 }
 
-fn decode(
-    root: Box<Node>,
-    bytes: Vec<u8>,
-    total_bits:usize
-) -> String {
+fn decode(root: Box<Node>, bytes: Vec<u8>, total_bits:usize) -> String {
     let mut result = String::new();
     let mut node = &root;
     let mut read_bits = 0;
+    
     for byte in bytes {
         for i in (0..8).rev() {
             if read_bits >= total_bits {
@@ -201,7 +197,6 @@ fn decode(
             }
         }
     }
-
     result
 }
 
