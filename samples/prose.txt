@@ -1,0 +1,5 @@
+Huffman coding gives short codes to common bytes and long codes to rare ones.
+In ordinary English text the space and the letter e show up far more often
+than q or z, so they end up near the top of the tree with only two or three
+bits each. The rare letters sink to the bottom and pay for it with eight or nine
+bits. On balance the file shrinks, usually to a little over half its size.

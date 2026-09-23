@@ -1,274 +1,243 @@
-use std::collections::HashMap;
-use std::cmp::{Ordering, Reverse};
-use std::collections::BinaryHeap;
-use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::time::Instant;
+mod container;
+mod huffman;
+mod trace;
+
 use std::env;
-use rayon::prelude::*;
+use std::fs;
+use std::process::ExitCode;
+use std::time::Instant;
 
-struct Node {
-    value: i32,
-    letter: Option<char>,
-    left: Option<Box<Node>>,
-    right: Option<Box<Node>>,
+use huffman::{build_codes, build_frequency, build_tree, decode, encode};
+use trace::{Stats, TraceInput};
+
+const USAGE: &str = "\
+zippy - Huffman compressor
+
+usage:
+  zippy compress   <input> [-o <output>] [--trace <file.json>|-] [--timings]
+  zippy decompress <input> [-o <output>] [--timings]
+  zippy stats      <input> [--trace <file.json>|-]
+
+compress     writes <input>.zpy by default and verifies the round-trip in memory
+decompress   needs only the .zpy file; writes <input> minus .zpy (or <input>.out)
+stats        compression statistics without writing anything
+--trace      dump frequencies, heap merges, codes and a bit-stream sample as JSON
+             ('-' writes to stdout)";
+
+struct Args {
+    command: String,
+    input: String,
+    output: Option<String>,
+    trace: Option<String>,
+    timings: bool,
 }
 
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
+fn parse_args() -> Result<Args, String> {
+    let mut it = env::args().skip(1);
+    let command = it.next().ok_or("missing command")?;
+    if command == "-h" || command == "--help" || command == "help" {
+        return Err(String::new());
     }
-}
-impl Eq for Node {}
-impl PartialOrd for Node {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Node {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.value.cmp(&other.value) {
-            Ordering::Equal => {
-                self.letter.cmp(&other.letter)
-            }
-            other => other
+    let mut input = None;
+    let mut output = None;
+    let mut trace = None;
+    let mut timings = false;
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "-o" | "--output" => output = Some(it.next().ok_or("-o needs a path")?),
+            "--trace" => trace = Some(it.next().ok_or("--trace needs a path or '-'")?),
+            "--timings" => timings = true,
+            "-h" | "--help" => return Err(String::new()),
+            s if s.starts_with('-') && s != "-" => return Err(format!("unknown option {s}")),
+            _ if input.is_none() => input = Some(a),
+            _ => return Err(format!("unexpected argument {a}")),
         }
     }
+    let input = input.ok_or("missing input file")?;
+    Ok(Args { command, input, output, trace, timings })
 }
 
-fn build_frequency(text: &str) -> HashMap<char, i32> {
-    text.as_bytes()
-        .par_chunks(4096)
-        .map(|chunk| {
-            let mut local = HashMap::new();
-            for &b in chunk {
-                let c = b as char;
-                *local.entry(c).or_insert(0) += 1;
-            }
-            local
+/// Tiny stage timer, printed only with --timings (to stderr so stdout stays clean).
+struct Timer {
+    on: bool,
+    t: Instant,
+}
+impl Timer {
+    fn lap(&mut self, what: &str) {
+        if self.on {
+            eprintln!("  {:<22} {:?}", what, self.t.elapsed());
+        }
+        self.t = Instant::now();
+    }
+}
+
+/// Everything the compressor produces for one input.
+struct Compressed {
+    file: Vec<u8>,
+    stats: Stats,
+    trace_json: Option<String>,
+}
+
+fn compress_bytes(name: &str, data: &[u8], want_trace: bool, timer: &mut Timer) -> Result<Compressed, String> {
+    let freq = build_frequency(data);
+    timer.lap("count frequencies");
+    let (tree, merges) = build_tree(&freq);
+    timer.lap("build tree");
+    let codes = match &tree {
+        Some(t) => build_codes(t),
+        None => [None; 256],
+    };
+    timer.lap("build codes");
+    let (payload, bits) = encode(data, &codes);
+    timer.lap("encode + pack");
+
+    let mut file = container::write_header(&freq);
+    let header_len = file.len();
+    file.extend_from_slice(&payload);
+
+    // Verify: decode from the finished file exactly as `decompress` would.
+    let back = decompress_bytes(&file)?;
+    if back != data {
+        return Err("round-trip verification failed".into());
+    }
+    timer.lap("verify round-trip");
+
+    let stats = Stats::new(&freq, &codes, header_len, bits);
+    let trace_json = want_trace.then(|| {
+        trace::to_json(&TraceInput {
+            name,
+            data,
+            freq: &freq,
+            merges: &merges,
+            root: tree.as_ref().map(|t| t.id),
+            codes: &codes,
+            payload: &payload,
+            stats: &stats,
         })
-        .reduce(
-            HashMap::new,
-            |mut a, b| {
-                for (k, v) in b {
-                    *a.entry(k).or_insert(0) += v;
-                }
-                a
-            },
-        )
+    });
+    Ok(Compressed { file, stats, trace_json })
 }
 
-fn build_tree(freq: &HashMap<char, i32>) -> Box<Node> {
-    let mut heap: BinaryHeap<Reverse<Box<Node>>> = BinaryHeap::new();
-    for (letter, count) in freq {
-        heap.push(Reverse(Box::new(Node {
-            value: *count,
-            letter: Some(*letter),
-            left: None,
-            right: None,
-        })));
+fn decompress_bytes(file: &[u8]) -> Result<Vec<u8>, String> {
+    let header = container::read_header(file)?;
+    let (tree, _) = build_tree(&header.freq);
+    match tree {
+        None => Ok(Vec::new()),
+        Some(root) => decode(&root, &file[header.header_len..], header.original_len),
     }
-
-    while heap.len() > 1 {
-        let left = heap.pop().unwrap().0;
-        let right = heap.pop().unwrap().0;
-        let parent = Node {
-            value: left.value + right.value,
-            letter: None,
-            left: Some(left),
-            right: Some(right),
-        };
-        heap.push(Reverse(Box::new(parent)));
-    }
-    heap.pop().unwrap().0
 }
 
-fn build_codes(root: Box<Node>) -> HashMap<char, String> {
-    let mut codes = HashMap::new();
-    let mut stack = Vec::new();
-    stack.push((root, String::new()));
-    while let Some((node, path)) = stack.pop() {
-        if node.left.is_none() && node.right.is_none() {
-            codes.insert(node.letter.unwrap(), path);
-            continue;
-        }
-        if let Some(left) = node.left {
-            stack.push((left, path.clone() + "0"));
-        }
-        if let Some(right) = node.right {
-            stack.push((right, path + "1"));
-        }
+fn write_trace(dest: &str, json: &str) -> Result<(), String> {
+    if dest == "-" {
+        print!("{json}");
+        Ok(())
+    } else {
+        fs::write(dest, json).map_err(|e| format!("{dest}: {e}"))
     }
-    codes
 }
 
-fn encode(text: &str, codes: &HashMap<char, String>) -> String {
-    text.par_bytes()
-        .map(|c| {
-            let c = c as char;
-            codes.get(&c).unwrap().clone()
-        })
-        .collect::<Vec<String>>()
-        .join("")
-}
+fn run(args: Args) -> Result<(), String> {
+    let read = |p: &str| fs::read(p).map_err(|e| format!("{p}: {e}"));
+    let mut timer = Timer { on: args.timings, t: Instant::now() };
+    let quiet = args.trace.as_deref() == Some("-");
 
-fn bits_to_bytes(bits: String) -> (Vec<u8>, usize) {
-    let total_bits = bits.len();
-    let mut bytes = Vec::new();
-    let mut current = 0u8;
-    let mut count = 0;
-    for bit in bits.chars() {
-        current <<= 1;
-        if bit == '1' {
-            current |= 1;
-        }
-        count += 1;
-        if count == 8 {
-            bytes.push(current);
-            current = 0;
-            count = 0;
-        }
-    }
-    if count > 0 {
-        current <<= 8-count;
-        bytes.push(current);
-    }
-    (bytes, total_bits)
-}
-
-fn compress_file(freq: &HashMap<char,i32>, bytes: Vec<u8>, total_bits: usize) {
-    let mut header = String::new();
-    for (c,count) in freq {
-        header.push_str(&format!("{} {}\n", c, count));
-    }
-    header.push_str("---\n");
-    header.push_str(&format!("{}\n", total_bits));
-    let mut file = File::create("compressed.huff").unwrap();
-    let size = header.len() as u32;
-    file.write_all(&size.to_le_bytes()).unwrap();
-    file.write_all(header.as_bytes()).unwrap();
-    file.write_all(&bytes).unwrap();
-}
-
-fn decompress_file() -> (HashMap<char,i32>, Vec<u8>, usize) {
-    let mut file = File::open("compressed.huff").unwrap();
-    let mut size_buffer = [0u8;4];
-    file.read_exact(&mut size_buffer).unwrap();
-
-    let size = u32::from_le_bytes(size_buffer) as usize;
-    let mut header_bytes = vec![0u8; size];
-    file.read_exact(&mut header_bytes).unwrap();
-
-    let header = String::from_utf8(header_bytes).unwrap();
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).unwrap();
-
-    let mut freq = HashMap::new();
-    let mut total_bits = 0;
-    for line in header.lines() {
-        if line == "---" {
-            continue;
-        }
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() == 1 {
-            total_bits = parts[0].parse().unwrap();
-        }
-        else {
-            let c = parts[0].chars().next().unwrap();
-            let count = parts[1].parse().unwrap();
-            freq.insert(c,count);
-
-        }
-    }
-
-    (freq, bytes, total_bits)
-}
-
-fn decode(root: Box<Node>, bytes: Vec<u8>, total_bits:usize) -> String {
-    let mut result = String::new();
-    let mut node = &root;
-    let mut read_bits = 0;
-
-    for byte in bytes {
-        for i in (0..8).rev() {
-            if read_bits >= total_bits {
-                break;
+    match args.command.as_str() {
+        "compress" | "c" => {
+            let data = read(&args.input)?;
+            timer.lap("read input");
+            let out = compress_bytes(&args.input, &data, args.trace.is_some(), &mut timer)?;
+            let dest = args.output.unwrap_or_else(|| format!("{}.zpy", args.input));
+            fs::write(&dest, &out.file).map_err(|e| format!("{dest}: {e}"))?;
+            timer.lap("write output");
+            if let (Some(t), Some(json)) = (&args.trace, &out.trace_json) {
+                write_trace(t, json)?;
             }
-            read_bits += 1;
-            let bit = (byte >> i) & 1;
-            if bit == 0 {
-                node = node.left.as_ref().unwrap();
+            let msg = format!(
+                "{} -> {}: {} B -> {} B ({:.1}%), round-trip OK",
+                args.input,
+                dest,
+                out.stats.original_bytes,
+                out.stats.compressed_bytes,
+                100.0 * out.stats.ratio
+            );
+            if quiet { eprintln!("{msg}") } else { println!("{msg}") }
+        }
+        "decompress" | "d" => {
+            let file = read(&args.input)?;
+            timer.lap("read input");
+            let data = decompress_bytes(&file)?;
+            timer.lap("decode");
+            let dest = args.output.unwrap_or_else(|| match args.input.strip_suffix(".zpy") {
+                Some(s) => s.to_string(),
+                None => format!("{}.out", args.input),
+            });
+            fs::write(&dest, &data).map_err(|e| format!("{dest}: {e}"))?;
+            timer.lap("write output");
+            println!("{} -> {}: {} B -> {} B", args.input, dest, file.len(), data.len());
+        }
+        "stats" | "s" => {
+            let data = read(&args.input)?;
+            let out = compress_bytes(&args.input, &data, args.trace.is_some(), &mut timer)?;
+            if let (Some(t), Some(json)) = (&args.trace, &out.trace_json) {
+                write_trace(t, json)?;
             }
-            else {
-                node = node.right.as_ref().unwrap();
-            }
-            if node.left.is_none() && node.right.is_none() {
-                result.push(node.letter.unwrap());
-                node = &root;
+            if !quiet {
+                println!("{}", args.input);
+                out.stats.print();
+                println!("round-trip      {:>12}", "OK");
             }
         }
+        other => return Err(format!("unknown command '{other}'")),
     }
-    result
+    Ok(())
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} <input_file>", args[0]);
-        return;
+fn main() -> ExitCode {
+    let args = match parse_args() {
+        Ok(a) => a,
+        Err(e) => {
+            if !e.is_empty() {
+                eprintln!("error: {e}\n");
+            }
+            eprintln!("{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
+    match run(args) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
+        }
     }
-    let input_file = &args[1];
-    let text = fs::read_to_string(input_file).unwrap();
+}
 
-    let start = Instant::now();
-    let freq = build_frequency(&text);
-    println!("Build frequency: {:?}", start.elapsed());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let start = Instant::now();
-    let tree = build_tree(&freq);
-    println!("Build tree: {:?}", start.elapsed());
+    fn file_roundtrip(data: &[u8]) -> usize {
+        let mut t = Timer { on: false, t: Instant::now() };
+        let c = compress_bytes("test", data, true, &mut t).unwrap();
+        assert_eq!(decompress_bytes(&c.file).unwrap(), data);
+        assert_eq!(c.stats.compressed_bytes as usize, c.file.len());
+        c.file.len()
+    }
 
-    let start = Instant::now();
-    let codes = build_codes(tree);
-    println!("Build codes: {:?}", start.elapsed());
+    #[test]
+    fn container_roundtrips() {
+        assert_eq!(file_roundtrip(b""), 5);
+        file_roundtrip(b"x");
+        file_roundtrip(b"zzzzzzzzzzzzzzzzz");
+        file_roundtrip(b"ABCBBAAAAAADDZBB");
+        let all: Vec<u8> = (0..=255u8).collect();
+        file_roundtrip(&all);
+        file_roundtrip("caf\u{e9} \u{1f980}\n\ttabs \"quotes\"".as_bytes());
+    }
 
-    let start = Instant::now();
-    let bits = encode(&text,&codes);
-    println!("Encode: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    let (bytes,total_bits)=bits_to_bytes(bits);
-    println!("Pack bits: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    compress_file(
-        &freq,
-        bytes,
-        total_bits
-    );
-    println!("Write compressed file: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    let (freq2,bytes2,total_bits2)=decompress_file();
-    println!("Read compressed file: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    let tree2 = build_tree(&freq2);
-    println!("Rebuild tree: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    let decoded = decode(
-        tree2,
-        bytes2,
-        total_bits2
-    );
-    println!("Decode: {:?}", start.elapsed());
-
-    let start = Instant::now();
-    fs::write(
-        "output.txt",
-        decoded
-    ).unwrap();
-    println!("Write output: {:?}", start.elapsed());
-    println!("Total: {:?}", start.elapsed());
+    #[test]
+    fn rejects_garbage() {
+        assert!(decompress_bytes(b"hello").is_err());
+        assert!(decompress_bytes(b"ZPY\x01\x01A").is_err());
+    }
 }

@@ -1,0 +1,40 @@
+//! Core Huffman coding: byte frequencies, tree construction, code table,
+//! bit packing and decoding.
+//!
+//! The tree build is fully deterministic. Every node gets an id (leaves use
+//! their byte value 0..=255, internal nodes use 256 + merge step) and the
+//! priority queue orders nodes by `(weight, id)`. Because that key is unique,
+//! the tree only depends on the frequency table, so the decompressor can
+//! rebuild the exact same tree from the header alone.
+
+use rayon::prelude::*;
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
+
+pub type Freq = [u64; 256];
+
+pub struct Node {
+    pub weight: u64,
+    pub id: u32,
+    pub symbol: Option<u8>,
+    pub left: Option<Box<Node>>,
+    pub right: Option<Box<Node>>,
+}
+
+impl Node {
+    fn is_leaf(&self) -> bool {
+        self.left.is_none() && self.right.is_none()
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.weight == other.weight && self.id == other.id
+    }
+}
+impl Eq for Node {}
+impl PartialOrd for Node {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
