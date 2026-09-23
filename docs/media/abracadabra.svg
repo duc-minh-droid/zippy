@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <style>
+    .bg { fill: #ffffff; }
+    .leaf { fill: #e3ecf7; stroke: #2f6fdb; stroke-width: 1.5; }
+    .inner { fill: #eceef2; stroke: #5d6673; stroke-width: 1.5; }
+    .pop { stroke: #c27c00; stroke-width: 3; }
+    .new { stroke: #d9453a; stroke-width: 3; }
+    .t { fill: #1b1f24; font-size: 13px; }
+    .c { fill: #1b1f24; font-size: 14px; font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+    .w { fill: #5d6673; font-size: 10px; font-family: ui-monospace, Consolas, monospace; }
+    .s { fill: #5d6673; font-size: 12px; }
+    .h { fill: #5d6673; font-size: 11px; letter-spacing: .12em; font-weight: 600; }
+    .m { font-family: ui-monospace, Consolas, monospace; }
+    .e { stroke: #8b95a3; stroke-width: 1.5; }
+    .z { fill: #0f8f94; } .o { fill: #c27c00; }
+    .panel { fill: #f6f7f9; stroke: #d9dde3; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0e1116; }
+      .leaf { fill: #243142; stroke: #8ab4ff; }
+      .inner { fill: #2c2f3a; stroke: #8b95a3; }
+      .pop { stroke: #f2b33d; } .new { stroke: #ff7a6b; }
+      .t, .c { fill: #e6e9ee; } .w, .s, .h { fill: #8b95a3; }
+      .e { stroke: #5d6673; }
+      .z { fill: #4fc3c7; } .o { fill: #f2b33d; }
+      .panel { fill: #161b22; stroke: #2a323d; }
+    }
+  </style>
+  <rect class="bg" width="960" height="520" rx="12"/>
+  <text class="h" x="24" y="30">BUILDING THE TREE FOR "abracadabra" (the queue is kept sorted by (count, byte), lightest first)</text>
+
+  <!-- step 0: initial queue -->
+  <rect class="panel" x="20" y="44" width="920" height="54" rx="8"/>
+  <text class="s" x="34" y="76">start</text>
+  <g transform="translate(150,71)">
+    <circle class="leaf pop" r="14"/><text class="c" text-anchor="middle" y="5">c</text><text class="w" x="20" y="4">1</text>
+    <circle class="leaf pop" cx="60" r="14"/><text class="c" x="60" text-anchor="middle" y="5">d</text><text class="w" x="80" y="4">1</text>
+    <circle class="leaf" cx="120" r="14"/><text class="c" x="120" text-anchor="middle" y="5">b</text><text class="w" x="140" y="4">2</text>
+    <circle class="leaf" cx="180" r="14"/><text class="c" x="180" text-anchor="middle" y="5">r</text><text class="w" x="200" y="4">2</text>
+    <circle class="leaf" cx="240" r="14"/><text class="c" x="240" text-anchor="middle" y="5">a</text><text class="w" x="260" y="4">5</text>
+  </g>
+  <text class="s" x="470" y="76">five leaves; c and d tie on count 1, and 'c' (0x63) sorts before 'd' (0x64)</text>
+
+  <!-- step 1 -->
+  <rect class="panel" x="20" y="106" width="920" height="70" rx="8"/>
+  <text class="s" x="34" y="146">merge 1</text>
+  <g transform="translate(150,124)">
+    <circle class="leaf pop" r="12"/><text class="c" text-anchor="middle" y="5">b</text>
+    <circle class="leaf pop" cx="60" r="12"/><text class="c" x="60" text-anchor="middle" y="5">r</text>
+    <line class="e" x1="120" y1="8" x2="105" y2="32"/><line class="e" x1="120" y1="8" x2="135" y2="32"/>
+    <circle class="inner new" cx="120" r="12"/><text class="w" x="120" text-anchor="middle" y="4">2</text>
+    <circle class="leaf" cx="105" cy="36" r="9"/><text class="w" x="105" y="39" text-anchor="middle">c</text>
+    <circle class="leaf" cx="135" cy="36" r="9"/><text class="w" x="135" y="39" text-anchor="middle">d</text>
+    <circle class="leaf" cx="190" r="12"/><text class="c" x="190" text-anchor="middle" y="5">a</text>
+  </g>
+  <text class="s" x="470" y="146">pop c(1) + d(1), push [2]. Now b, r and [2] all weigh 2; leaves win the tie (id &lt; 256)</text>
+
+  <!-- step 2 -->
+  <rect class="panel" x="20" y="184" width="920" height="70" rx="8"/>
+  <text class="s" x="34" y="224">merge 2</text>
+  <g transform="translate(150,202)">
+    <line class="e" x1="0" y1="8" x2="-15" y2="32"/><line class="e" x1="0" y1="8" x2="15" y2="32"/>
+    <circle class="inner pop" r="12"/><text class="w" text-anchor="middle" y="4">2</text>
+    <circle class="leaf" cx="-15" cy="36" r="9"/><text class="w" x="-15" y="39" text-anchor="middle">c</text>
+    <circle class="leaf" cx="15" cy="36" r="9"/><text class="w" x="15" y="39" text-anchor="middle">d</text>
+    <line class="e" x1="70" y1="8" x2="55" y2="32"/><line class="e" x1="70" y1="8" x2="85" y2="32"/>
+    <circle class="inner pop new" cx="70" r="12"/><text class="w" x="70" text-anchor="middle" y="4">4</text>
+    <circle class="leaf" cx="55" cy="36" r="9"/><text class="w" x="55" y="39" text-anchor="middle">b</text>
+    <circle class="leaf" cx="85" cy="36" r="9"/><text class="w" x="85" y="39" text-anchor="middle">r</text>
+    <circle class="leaf" cx="140" r="12"/><text class="c" x="140" text-anchor="middle" y="5">a</text>
+  </g>
+  <text class="s" x="470" y="224">pop b(2) + r(2), push [4]. Queue: [2], [4], a(5)</text>
+
+  <!-- step 3 -->
+  <rect class="panel" x="20" y="262" width="920" height="88" rx="8"/>
+  <text class="s" x="34" y="310">merge 3</text>
+  <g transform="translate(150,280)">
+    <circle class="leaf pop" r="12"/><text class="c" text-anchor="middle" y="5">a</text>
+    <line class="e" x1="80" y1="6" x2="55" y2="30"/><line class="e" x1="80" y1="6" x2="105" y2="30"/>
+    <circle class="inner pop new" cx="80" r="12"/><text class="w" x="80" text-anchor="middle" y="4">6</text>
+    <line class="e" x1="55" y1="34" x2="43" y2="56"/><line class="e" x1="55" y1="34" x2="67" y2="56"/>
+    <line class="e" x1="105" y1="34" x2="93" y2="56"/><line class="e" x1="105" y1="34" x2="117" y2="56"/>
+    <circle class="inner" cx="55" cy="34" r="9"/><text class="w" x="55" y="37" text-anchor="middle">2</text>
+    <circle class="inner" cx="105" cy="34" r="9"/><text class="w" x="105" y="37" text-anchor="middle">4</text>
+    <circle class="leaf" cx="43" cy="60" r="8"/><text class="w" x="43" y="63" text-anchor="middle">c</text>
+    <circle class="leaf" cx="67" cy="60" r="8"/><text class="w" x="67" y="63" text-anchor="middle">d</text>
+    <circle class="leaf" cx="93" cy="60" r="8"/><text class="w" x="93" y="63" text-anchor="middle">b</text>
+    <circle class="leaf" cx="117" cy="60" r="8"/><text class="w" x="117" y="63" text-anchor="middle">r</text>
+  </g>
+  <text class="s" x="470" y="310">pop [2] + [4], push [6]. Last merge: a(5) + [6] = [11]</text>
+
+  <!-- final tree -->
+  <text class="h" x="24" y="380">FINAL TREE AND CODES</text>
+  <g transform="translate(40,0)">
+    <line class="e" x1="150" y1="400" x2="80" y2="440"/><line class="e" x1="150" y1="400" x2="220" y2="440"/>
+    <line class="e" x1="220" y1="440" x2="175" y2="475"/><line class="e" x1="220" y1="440" x2="265" y2="475"/>
+    <line class="e" x1="175" y1="475" x2="155" y2="500"/><line class="e" x1="175" y1="475" x2="195" y2="500"/>
+    <line class="e" x1="265" y1="475" x2="245" y2="500"/><line class="e" x1="265" y1="475" x2="285" y2="500"/>
+    <text class="m z" x="104" y="416" font-size="12">0</text><text class="m o" x="189" y="416" font-size="12">1</text>
+    <text class="m z" x="186" y="456" font-size="12">0</text><text class="m o" x="248" y="456" font-size="12">1</text>
+    <text class="m z" x="152" y="490" font-size="11">0</text><text class="m o" x="190" y="490" font-size="11">1</text>
+    <text class="m z" x="242" y="490" font-size="11">0</text><text class="m o" x="280" y="490" font-size="11">1</text>
+    <circle class="inner" cx="150" cy="400" r="12"/><text class="w" x="150" y="404" text-anchor="middle">11</text>
+    <circle class="leaf" cx="80" cy="440" r="12"/><text class="c" x="80" y="445" text-anchor="middle">a</text>
+    <circle class="inner" cx="220" cy="440" r="11"/><text class="w" x="220" y="444" text-anchor="middle">6</text>
+    <circle class="inner" cx="175" cy="475" r="9"/><text class="w" x="175" y="478" text-anchor="middle">2</text>
+    <circle class="inner" cx="265" cy="475" r="9"/><text class="w" x="265" y="478" text-anchor="middle">4</text>
+    <circle class="leaf" cx="155" cy="503" r="9"/><text class="w" x="155" y="506" text-anchor="middle">c</text>
+    <circle class="leaf" cx="195" cy="503" r="9"/><text class="w" x="195" y="506" text-anchor="middle">d</text>
+    <circle class="leaf" cx="245" cy="503" r="9"/><text class="w" x="245" y="506" text-anchor="middle">b</text>
+    <circle class="leaf" cx="285" cy="503" r="9"/><text class="w" x="285" y="506" text-anchor="middle">r</text>
+  </g>
+
+  <g class="m" font-size="13">
+    <text class="t m" x="380" y="404">a</text><text class="t m" x="400" y="404"><tspan class="z">0</tspan></text><text class="s m" x="444" y="404" font-size="13">x5</text><text class="t m" x="530" y="404" text-anchor="end">5 bits</text>
+    <text class="t m" x="380" y="424">b</text><text class="t m" x="400" y="424"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="z">0</tspan></text><text class="s m" x="444" y="424" font-size="13">x2</text><text class="t m" x="530" y="424" text-anchor="end">6 bits</text>
+    <text class="t m" x="380" y="444">r</text><text class="t m" x="400" y="444"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="o">1</tspan></text><text class="s m" x="444" y="444" font-size="13">x2</text><text class="t m" x="530" y="444" text-anchor="end">6 bits</text>
+    <text class="t m" x="380" y="464">c</text><text class="t m" x="400" y="464"><tspan class="o">1</tspan><tspan class="z">0</tspan><tspan class="z">0</tspan></text><text class="s m" x="444" y="464" font-size="13">x1</text><text class="t m" x="530" y="464" text-anchor="end">3 bits</text>
+    <text class="t m" x="380" y="484">d</text><text class="t m" x="400" y="484"><tspan class="o">1</tspan><tspan class="z">0</tspan><tspan class="o">1</tspan></text><text class="s m" x="444" y="484" font-size="13">x1</text><text class="t m" x="530" y="484" text-anchor="end">3 bits</text>
+    <text class="s" x="380" y="506">total 23 bits = 2.09 bits/byte (entropy 2.04)</text>
+    <text class="s m" x="664" y="404" font-size="13" text-anchor="middle">a</text>
+    <text class="m" x="664" y="424" font-size="13" text-anchor="middle"><tspan class="z">0</tspan></text>
+    <text class="s m" x="688" y="404" font-size="13" text-anchor="middle">b</text>
+    <text class="m" x="688" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="z">0</tspan></text>
+    <text class="s m" x="720" y="404" font-size="13" text-anchor="middle">r</text>
+    <text class="m" x="720" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="o">1</tspan></text>
+    <text class="s m" x="744" y="404" font-size="13" text-anchor="middle">a</text>
+    <text class="m" x="744" y="424" font-size="13" text-anchor="middle"><tspan class="z">0</tspan></text>
+    <text class="s m" x="768" y="404" font-size="13" text-anchor="middle">c</text>
+    <text class="m" x="768" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="z">0</tspan><tspan class="z">0</tspan></text>
+    <text class="s m" x="792" y="404" font-size="13" text-anchor="middle">a</text>
+    <text class="m" x="792" y="424" font-size="13" text-anchor="middle"><tspan class="z">0</tspan></text>
+    <text class="s m" x="816" y="404" font-size="13" text-anchor="middle">d</text>
+    <text class="m" x="816" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="z">0</tspan><tspan class="o">1</tspan></text>
+    <text class="s m" x="840" y="404" font-size="13" text-anchor="middle">a</text>
+    <text class="m" x="840" y="424" font-size="13" text-anchor="middle"><tspan class="z">0</tspan></text>
+    <text class="s m" x="864" y="404" font-size="13" text-anchor="middle">b</text>
+    <text class="m" x="864" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="z">0</tspan></text>
+    <text class="s m" x="896" y="404" font-size="13" text-anchor="middle">r</text>
+    <text class="m" x="896" y="424" font-size="13" text-anchor="middle"><tspan class="o">1</tspan><tspan class="o">1</tspan><tspan class="o">1</tspan></text>
+    <text class="s m" x="920" y="404" font-size="13" text-anchor="middle">a</text>
+    <text class="m" x="920" y="424" font-size="13" text-anchor="middle"><tspan class="z">0</tspan></text>
+    <text class="s" x="660" y="454">packed MSB first, padded to a byte:</text>
+    <text class="t m" x="692" y="476" text-anchor="middle">01101110</text><text class="t m" x="692" y="496" text-anchor="middle">6E</text>
+    <text class="t m" x="770" y="476" text-anchor="middle">10001010</text><text class="t m" x="770" y="496" text-anchor="middle">8A</text>
+    <text class="t m" x="848" y="476" text-anchor="middle">11011100</text><text class="t m" x="848" y="496" text-anchor="middle">DC</text>
+  </g>
+</svg>
