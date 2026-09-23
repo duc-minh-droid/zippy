@@ -1,5 +1,7 @@
 # zippy
 
+**Live demo:** https://zippy-mocha.vercel.app
+
 A Huffman compressor in Rust, plus a browser visualizer that replays the real compressor's work step by step.
 
 ![zippy visualizer: counting bytes, merging the priority queue into a tree, reading codes and emitting bits](docs/media/demo.gif)
