@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zippy visualizer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>zippy</h1>
+    <p>Huffman coding, one step at a time</p>
+  </div>
+  <div id="source" class="source"></div>
+</header>
+
+<main class="layout">
+  <aside class="side">
+    <section class="panel">
+      <h2>Input</h2>
+      <div id="samples" class="chips"></div>
+      <div id="drop" class="drop">
+        <textarea id="text" spellcheck="false" placeholder="Type here, or drop a file"></textarea>
+        <div class="drop-hint">drop a file to compress it</div>
+      </div>
+      <div id="inputInfo" class="muted small"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Compression</h2>
+      <svg id="gauge" viewBox="0 0 220 128" class="gauge" aria-label="compression ratio gauge"></svg>
+      <div id="sizes" class="sizes"></div>
+      <h3>Bits per byte</h3>
+      <div id="hl" class="hl"></div>
+    </section>
+  </aside>
+
+  <section class="stage">
+    <div class="controls panel">
+      <ol id="phases" class="phases">
+        <li data-phase="count">1 Count bytes</li>
+        <li data-phase="merge">2 Merge queue</li>
+        <li data-phase="codes">3 Read codes</li>
+        <li data-phase="encode">4 Emit bits</li>
+      </ol>
+      <div class="buttons">
+        <button id="restart" title="Restart (Home)">&#x23EE;</button>
+        <button id="back" title="Step back (Left)">&#x25C0;</button>
+        <button id="play" class="primary" title="Play / pause (Space)">Play</button>
+        <button id="fwd" title="Step forward (Right)">&#x25B6;</button>
+        <button id="end" title="Skip to end (End)">&#x23ED;</button>
+        <label class="speed">speed <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1"></label>
+      </div>
+      <input id="scrub" class="scrub" type="range" min="0" max="0" value="0" aria-label="timeline">
+      <div id="caption" class="caption"></div>
+    </div>
+
+    <div class="panel hist-panel">
+      <h2>Byte frequencies <span id="histNote" class="muted small"></span></h2>
+      <div id="hist" class="hist"></div>
+    </div>
+
+    <div class="mid">
+      <div class="panel tree-panel">
+        <h2>Priority queue &rarr; Huffman tree <span id="treeNote" class="muted small"></span></h2>
+        <svg id="tree" class="tree"></svg>
+      </div>
+      <div class="panel codes-panel">
+        <h2>Code table</h2>
+        <div class="codes-wrap"><table id="codes" class="codes"></table></div>
+      </div>
+    </div>
+
+    <div class="panel stream-panel">
+      <h2>Bit stream <span id="streamNote" class="muted small"></span></h2>
+      <div id="streamText" class="stream-text"></div>
+      <div id="streamBits" class="stream-bits"></div>
+      <div id="streamHex" class="stream-hex"></div>
+    </div>
+  </section>
+</main>
+
+<script src="huffman.js"></script>
+<script src="traces.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
